@@ -1,0 +1,25 @@
+{
+  "name": "Thailand Trip Hub",
+  "short_name": "Tailandia",
+  "description": "Toda la información del viaje a Tailandia: agenda, vuelos, hoteles, excursiones, mapa, listas y gastos.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B4F45",
+  "theme_color": "#0B4F45",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["travel", "lifestyle"],
+  "icons": [
+    { "src": "./assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Agenda", "url": "./index.html#/agenda" },
+    { "name": "Reservas", "url": "./index.html#/reservas" },
+    { "name": "Contactos", "url": "./index.html#/contactos" }
+  ]
+}
