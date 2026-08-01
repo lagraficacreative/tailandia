@@ -4,6 +4,7 @@
 
 import { TRIP, PEOPLE, PLACES, CITIES, DAYS } from './data.js';
 import { store, refreshRate } from './store.js';
+import { photos } from './photos.js';
 import {
   $, $$, el, esc, icon, toast, sheet, confirmSheet, copy, timeIn,
   fmtDate, isoDate, downloadText, avatar, emptyState, mapsUrl,
@@ -21,6 +22,7 @@ const ROUTES = {
   '/listas':    { title: 'Listas', sub: 'Equipaje y pendientes', render: V.viewLists, back: '#/mas' },
   '/documentos':{ title: 'Documentos', sub: 'La carpeta del viaje', render: V.viewDocs, back: '#/mas' },
   '/comer':     { title: 'Comer y comprar', sub: 'Cerca de los hoteles', render: V.viewFood, back: '#/mas' },
+  '/notas':     { title: 'Notas', sub: 'Todo lo apuntado', render: V.viewNotes, back: '#/mas' },
   '/info':      { title: 'Información útil', render: V.viewInfo, back: '#/mas' },
   '/contactos': { title: 'Contactos', render: V.viewContacts, back: '#/mas' },
   '/refs':      { title: 'Localizadores', render: V.viewRefs, back: '#/mas' },
@@ -74,6 +76,8 @@ function paint(r, html) {
       ${r.back ? `<button class="icon-btn" data-back aria-label="Volver">${icon('back', 20)}</button>` : ''}
       <h1>${esc(r.title)}${r.sub ? `<span class="sub">${esc(r.sub)}</span>` : ''}</h1>
       ${r.tab === 'inicio' ? `<button class="icon-btn" data-install hidden aria-label="Instalar">${icon('download', 19)}</button>` : ''}
+      <button class="icon-btn" data-conv aria-label="Conversor de moneda"
+        title="Euros y bahts">${icon('euro', 20)}</button>
       ${r.tab === 'inicio' ? `<a class="icon-btn" href="#/grupo" aria-label="Ajustes">${icon('settings', 19)}</a>` : ''}
     </div>`;
 
@@ -264,6 +268,23 @@ document.addEventListener('click', async e => {
   const doc = t.closest('[data-doc]');
   if (doc) { V.openDoc(doc.dataset.doc); return; }
 
+  const pas = t.closest('[data-pasaporte]');
+  if (pas) { V.openPassport(pas.dataset.pasaporte); return; }
+
+  const nota = t.closest('[data-nota]');
+  if (nota) { V.openNota(nota.dataset.nota, nota.dataset.notaT); return; }
+
+  const uitem = t.closest('[data-uitem]');
+  if (uitem) { V.openUserItem(uitem.dataset.uitem); return; }
+
+  const addAct = t.closest('[data-add-act]');
+  if (addAct) { V.addActivitySheet(null, addAct.dataset.addAct || undefined); return; }
+
+  if (t.closest('[data-add-note]')) { V.openFreeNote(null); return; }
+
+  const noteId = t.closest('[data-note-id]');
+  if (noteId) { V.openFreeNote(noteId.dataset.noteId); return; }
+
   const chk = t.closest('[data-chk]');
   if (chk) {
     if (!store.me()) { whoAmI(() => { store.toggle(chk.dataset.chk); render(); }); return; }
@@ -292,6 +313,8 @@ document.addEventListener('click', async e => {
     if (await confirmSheet('Eliminar', '¿Quitar este elemento de la lista?')) { store.removeItem(list, id); render(); }
     return;
   }
+
+  if (t.closest('[data-conv]')) { V.converterSheet(); return; }
 
   if (t.closest('[data-add-exp]')) { V.addExpenseSheet(); return; }
 
@@ -440,7 +463,7 @@ async function shareApp() {
 
 function exportAllIcs() {
   const ev = [];
-  DAYS.forEach(d => d.items.forEach(it => {
+  DAYS.forEach(d => [...d.items, ...store.activitiesOf(d.date)].forEach(it => {
     if (!it.time) return;
     ev.push([
       'BEGIN:VEVENT',
@@ -503,6 +526,12 @@ window.addEventListener('store:change', () => {
 
 async function boot() {
   render();
+
+  // Las fotos de los tickets se cargan aparte: si el navegador las bloquea,
+  // la app tiene que arrancar igual.
+  photos.refresh()
+    .then(() => { if (parseHash().path === '/gastos') render(); })
+    .catch(() => {});
   updateOnline();
   refreshRate().then(() => { if (parseHash().path === '/info') render(); });
 

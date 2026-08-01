@@ -26,21 +26,7 @@ hay que publicarla en internet: es el paso siguiente y son dos minutos.
 La app son archivos estáticos: no necesita servidor, base de datos ni compilación.
 Todo lo necesario para GitHub y para Coolify ya está preparado dentro de la carpeta.
 
-### Opción A · GitHub Pages desde la carpeta `docs` (la más fácil)
-
-Esta carpeta se llama **`docs`** a propósito: GitHub Pages sabe publicar desde ella.
-Así basta con arrastrar la carpeta entera al repositorio, sin tener que entrar dentro
-y seleccionar los archivos uno a uno.
-
-1. Crea un repositorio nuevo en GitHub, público, y vacío.
-2. En "Add file → Upload files", arrastra la carpeta **`docs`** completa.
-3. Confirma la subida. En el repositorio quedará `docs/index.html`.
-4. **Settings → Pages → Source: Deploy from a branch → Branch: main → carpeta: /docs.**
-5. En un minuto tendrás la dirección `https://TU-USUARIO.github.io/tailandia/`.
-
-La web se sirve en la raíz igualmente: la carpeta `docs` no aparece en la dirección.
-
-### Opción A2 · GitHub Pages desde la raíz
+### Opción A · GitHub Pages
 
 Es la más rápida y no cuesta nada.
 
@@ -124,11 +110,12 @@ Queda con su icono, se abre a pantalla completa y funciona igual que una app.
 | Pantalla | Qué incluye |
 |---|---|
 | **Inicio** | Cuenta atrás, hora de España y de Tailandia, previsión del tiempo, avisos importantes, próxima actividad, **lo próximo que hay que hacer** (las tareas con la fecha límite más cercana), próximo vuelo y traslado, itinerario por ciudades y progreso de las listas |
-| **Agenda** | Los 9 días hora a hora, en vista cronológica y en calendario. Cada momento se abre con todos los datos, teléfonos, mapa y notas. Detecta horarios que se solapan |
+| **Agenda** | Los 9 días hora a hora, en vista cronológica y en calendario. Cada momento se abre con todos los datos, teléfonos, mapa y notas. Detecta horarios que se solapan. Se pueden **añadir actividades propias** con el botón naranja y ponerle una **nota a cada día** |
+| **Notas** | Notas sueltas y, además, todas las que hayáis puesto en los días, vuelos, hoteles, excursiones y documentos, reunidas en una sola pantalla |
 | **Mapa** | 40 puntos con filtros por categoría: ciudades, aeropuertos, hoteles, excursiones, monumentos, playas, compras, hospitales y la embajada |
-| **Gastos** | Presupuesto, balance de quién debe qué, gráfico por categorías, conversión baht/euro y exportación a CSV |
+| **Gastos** | Presupuesto, balance de quién debe qué, gráfico por categorías, conversor euro/baht y exportación a CSV. Cada gasto puede llevar **foto del ticket**, hecha con la cámara y guardada en el propio móvil |
 | **Reservas** | Los 5 vuelos, los 4 traslados, los 2 hoteles y las excursiones, con localizadores copiables |
-| **Documentos** | La carpeta del viaje: billetes, tarjetas de embarque, TDAC, bonos, pólizas, contrato, copias de pasaportes y permisos de conducir. Cada ficha guarda su enlace de Drive o Dropbox |
+| **Documentos** | **Pasaportes** con la fecha de caducidad de cada uno y el aviso de si sirve para el viaje (cada persona puede guardar su número, solo en su móvil). Y la carpeta del viaje: billetes, tarjetas de embarque, TDAC, bonos, pólizas, contrato, copias de pasaportes y permisos de conducir. Cada ficha guarda su enlace de Drive o Dropbox |
 | **Comer y comprar** | Restaurantes y supermercados cerca de cada hotel, con precios reales en euros y tabla de referencia |
 | **Listas** | 9 listas plegables con casillas. La primera, **Una semana antes**, tiene los 12 apartados de la guía previa (documentación, TDAC, traslados, excursiones, vuelos, salida de Lleida, dinero, móvil, seguro, equipaje y salud) con fecha límite en cada tarea. Después: **El día antes de salir**, documentación, ropa, botiquín, higiene, tecnología, dinero y compras del grupo |
 | **Información útil** | Equipaje, documentación y TDAC, seguros, pagos con QR, diferencia horaria, clima, enchufes, SIM, transporte, costumbres, frases en tailandés, emergencias y hospitales |
@@ -226,12 +213,51 @@ que toque y cambia la fecha, la ciudad y las actividades.
 
 ---
 
+### Qué NO hay que poner en esta carpeta
+
+El repositorio de GitHub es **público**. Nunca metas ahí:
+
+- Números de pasaporte, DNI o tarjetas
+- Fotos o escaneos de pasaportes
+- Contraseñas
+
+En `js/data.js` solo van las **fechas de caducidad** de los pasaportes, que es lo que
+hace falta para comprobar que sirven. Los números los guarda cada uno desde la app,
+y se quedan en su móvil.
+
+Para las copias de los pasaportes, usa una carpeta de Drive **aparte y restringida**,
+compartida por correo solo con los cuatro. Su enlace no lo pongas en la app.
+
+### Dónde se pueden poner notas
+
+En todo: cada día de la agenda, cada actividad, cada vuelo, cada traslado, cada hotel,
+cada excursión, cada documento, cada restaurante y supermercado, cada apartado de
+información útil y cada lista. Más un campo libre en Contactos y en Localizadores para
+apuntar teléfonos y referencias nuevas.
+
+Y notas sueltas en la pantalla **Notas**, donde además aparecen recogidas todas las
+demás para que no se pierda ninguna.
+
+### Cómo está organizada
+
+- **Barra de abajo (5 pestañas):** lo que se usa a todas horas — Inicio, Agenda,
+  Mapa, Gastos y Más.
+- **Accesos rápidos del inicio (8 botones):** todo lo demás, a un toque —
+  Reservas, Documentos, Comer, Listas, Info útil, Contactos, Localizadores y Grupo.
+- **Botón € de la barra de arriba:** el conversor euro/baht, desde cualquier pantalla.
+
+---
+
 ## 5. Cómo se guardan las cosas
 
 - **La información del viaje** (agenda, vuelos, hoteles, teléfonos…) viene del archivo
   `js/data.js` y es igual para todo el mundo.
 - **Lo que cada uno marca** (casillas de las listas, gastos nuevos, notas) se guarda
   **en su propio móvil**. No se sincroniza entre personas.
+- **Las fotos de los tickets** se guardan en el móvil de quien las hace, aparte del
+  resto (usan el almacenamiento de imágenes del navegador). No se sincronizan ni se
+  suben a internet, y **no van dentro de la copia de seguridad**: si vas a cambiar de
+  móvil, guárdalas antes en el carrete o en Drive.
 - En *Más → Grupo y ajustes* se puede **descargar una copia** de todo lo marcado y
   **restaurarla** en otro móvil.
 
@@ -264,6 +290,7 @@ css/styles.css                    todo el diseño
 js/data.js                        ← TODOS LOS DATOS DEL VIAJE
 js/core.js                        utilidades e iconos
 js/store.js                       lo que se guarda en el móvil
+js/photos.js                      las fotos de los tickets
 js/views.js                       las pantallas
 js/app.js                         navegación, mapa y acciones
 vendor/                           Leaflet (el mapa)

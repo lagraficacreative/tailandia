@@ -14,6 +14,8 @@ const DEFAULTS = {
   expenses: [],      // gastos añadidos por el grupo
   notes: {},         // { key: texto }
   budget: TRIP.budget,
+  activities: [],    // actividades añadidas por el grupo desde la app
+  freeNotes: [],     // notas sueltas
   me: '',            // quién soy (para firmar los cambios)
   rate: null,        // { thbPerEur, at }
   seen: {},
@@ -77,8 +79,10 @@ export const store = {
   /* ---- Gastos ---- */
   allExpenses() { return [...BASE_EXPENSES, ...state.expenses]; },
   addExpense(e) {
-    state.expenses.push({ ...e, id: uid().slice(0, 8), date: e.date || isoDate(new Date()) });
+    const id = uid().slice(0, 8);
+    state.expenses.push({ ...e, id, date: e.date || isoDate(new Date()) });
     persist();
+    return id;
   },
   updateExpense(id, patch) {
     const i = state.expenses.findIndex(x => x.id === id);
@@ -92,6 +96,53 @@ export const store = {
 
   budget() { return state.budget ?? TRIP.budget; },
   setBudget(v) { state.budget = Number(v) || 0; persist(); },
+
+  /* ---- Actividades añadidas desde la app ---- */
+  activities() { return state.activities; },
+  activitiesOf(date) {
+    return state.activities.filter(a => a.date === date);
+  },
+  activity(id) { return state.activities.find(a => a.id === id) || null; },
+  addActivity(a) {
+    const id = 'u' + uid().slice(0, 7);
+    state.activities.push({ ...a, id, by: state.me, at: new Date().toISOString() });
+    persist();
+    return id;
+  },
+  updateActivity(id, patch) {
+    const i = state.activities.findIndex(a => a.id === id);
+    if (i >= 0) { state.activities[i] = { ...state.activities[i], ...patch }; persist(); }
+  },
+  removeActivity(id) {
+    state.activities = state.activities.filter(a => a.id !== id);
+    persist();
+  },
+
+  /* ---- Notas sueltas ---- */
+  freeNotes() { return state.freeNotes; },
+  freeNote(id) { return state.freeNotes.find(n => n.id === id) || null; },
+  addFreeNote(title, body) {
+    const id = 'n' + uid().slice(0, 7);
+    state.freeNotes.unshift({ id, title, body, by: state.me, at: new Date().toISOString() });
+    persist();
+    return id;
+  },
+  updateFreeNote(id, patch) {
+    const i = state.freeNotes.findIndex(n => n.id === id);
+    if (i >= 0) {
+      state.freeNotes[i] = { ...state.freeNotes[i], ...patch, at: new Date().toISOString() };
+      persist();
+    }
+  },
+  removeFreeNote(id) {
+    state.freeNotes = state.freeNotes.filter(n => n.id !== id);
+    persist();
+  },
+
+  /* ---- Cuántas notas hay puestas ---- */
+  noteCount() {
+    return Object.keys(state.notes).length + state.freeNotes.length;
+  },
 
   /* ---- Notas ---- */
   note(k) { return state.notes[k] || ''; },

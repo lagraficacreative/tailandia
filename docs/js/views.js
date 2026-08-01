@@ -8,11 +8,12 @@ import {
   DOCS, DOCS_FOLDER, FOOD, PRICES,
 } from './data.js';
 import { store } from './store.js';
+import { photos, comprimir } from './photos.js';
 import {
   $, $$, el, esc, icon, avatar, initials, toast, sheet, confirmSheet,
   fmtDate, fmtTime, isoDate, toDate, daysBetween, timeIn, mins,
   money, mapsUrl, telUrl, waUrl, copy, quickActions, emptyState,
-  downloadText, icsEvent, colorFor,
+  downloadText, icsEvent, colorFor, addMinutes, addDays,
 } from './core.js';
 
 /* --------------------------------------------------------------- Ayudas - */
@@ -67,10 +68,17 @@ function rich(t) {
     .replace(/\n/g, '<br>');
 }
 
+/** Los items de un día: los del itinerario más los que se hayan añadido */
+function itemsOfDay(d) {
+  const propios = store.activitiesOf(d.date).map(a => ({ ...a, userId: a.id }));
+  return [...d.items, ...propios]
+    .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+}
+
 /** Todos los momentos del viaje en orden, para "próxima actividad" */
 function timeline() {
   const out = [];
-  DAYS.forEach(d => d.items.forEach((it, i) => {
+  DAYS.forEach(d => itemsOfDay(d).forEach((it, i) => {
     out.push({ ...it, date: d.date, city: d.city, dayTitle: d.title, idx: i });
   }));
   return out.sort((a, b) =>
@@ -103,6 +111,108 @@ function activeNotices() {
 }
 
 /* ==========================================================================
+   NOTAS  ·  se pueden poner en cualquier ficha
+   ========================================================================== */
+
+/** Botón compacto de nota. Muestra si ya hay algo escrito. */
+export function notaBtn(key, titulo) {
+  const v = store.note(key);
+  return `<button class="btn ${v ? 'soft' : 'ghost'} block" data-nota="${esc(key)}"
+    data-nota-t="${esc(titulo)}" style="margin-top:12px">
+    ${icon('edit', 16)} ${v ? 'Ver la nota' : 'Añadir una nota'}
+    ${v ? `<span class="pill pill-ok" style="margin-left:4px">1</span>` : ''}
+  </button>
+  ${v ? `<div class="card card-pad" style="margin-top:8px;background:var(--sand-100);border-color:var(--sand-300)">
+    <div class="tiny muted strong" style="text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Nota</div>
+    <div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap">${esc(v)}</div>
+  </div>` : ''}`;
+}
+
+/** Bloque de nota siempre abierto, para las fichas grandes */
+export function notaBlock(key, etiqueta = 'Nota del grupo', placeholder = '') {
+  return `
+  <div class="section-head"><h2>${esc(etiqueta)}</h2></div>
+  <textarea class="textarea" data-note="${esc(key)}"
+    placeholder="${esc(placeholder || 'Escribe aquí lo que quieras recordar…')}">${esc(store.note(key))}</textarea>`;
+}
+
+export function openNota(key, titulo) {
+  sheet({
+    title: titulo || 'Nota',
+    sub: 'Se guarda en este móvil',
+    body: `<div class="field">
+        <label>Nota</label>
+        <textarea class="textarea" style="min-height:180px" data-n
+          placeholder="Lo que quieras recordar: un horario, un nombre, una idea…">${esc(store.note(key))}</textarea>
+      </div>`,
+    foot: `<button class="btn ghost" data-borra>${icon('trash', 15)} Borrar</button>
+           <button class="btn" data-ok>Guardar</button>`,
+    onMount(root, close) {
+      root.querySelector('[data-borra]').onclick = () => {
+        store.setNote(key, '');
+        close(); toast('Nota borrada', 'ok');
+        window.dispatchEvent(new CustomEvent('render'));
+      };
+      root.querySelector('[data-ok]').onclick = () => {
+        store.setNote(key, root.querySelector('[data-n]').value);
+        close(); toast('Nota guardada', 'ok');
+        window.dispatchEvent(new CustomEvent('render'));
+      };
+    },
+  });
+}
+
+/* ==========================================================================
+   CONVERSOR DE MONEDA
+   ========================================================================== */
+export function converterCard() {
+  const rate = store.rate();
+  return `
+  <div class="card card-pad c-hotel" data-conv-card>
+    <div class="row-between" style="margin-bottom:12px">
+      <b style="font-size:15px">${icon('swap', 16)} Euros y bahts</b>
+      <span class="pill pill-info">1 € = ${rate.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ฿</span>
+    </div>
+    <div class="grid-2">
+      <div class="field" style="margin:0"><label>Euros</label>
+        <input class="input num" type="number" inputmode="decimal" data-cv="eur" placeholder="0"></div>
+      <div class="field" style="margin:0"><label>Bahts</label>
+        <input class="input num" type="number" inputmode="decimal" data-cv="thb" placeholder="0"></div>
+    </div>
+    <div class="row wrap" style="gap:6px;margin-top:12px">
+      ${[50, 100, 200, 500, 1000, 2000, 5000].map(v =>
+        `<button class="chip" data-quick-thb="${v}">${v} ฿</button>`).join('')}
+    </div>
+    <div class="tiny muted" style="margin-top:10px">${store.rateInfo()
+      ? 'Cambio actualizado el ' + fmtDate(store.rateInfo().at.slice(0, 10), 'short')
+      : 'Cambio orientativo. Se actualiza solo cuando hay conexión.'}</div>
+  </div>`;
+}
+
+/** El conversor, abierto desde cualquier pantalla */
+export function converterSheet() {
+  sheet({
+    title: 'Euros y bahts',
+    sub: 'Para saber si algo es caro sin hacer cuentas',
+    body: converterCard() + `
+      <div class="section-head"><h2>Para hacerse una idea</h2></div>
+      <div class="card">
+        ${[['Agua pequeña', 15], ['Café', 60], ['Plato de comida callejera', 60],
+           ['Comida en restaurante local', 200], ['Trayecto corto en Grab', 100],
+           ['Cena bonita en Phuket', 800], ['Masaje de una hora', 400]]
+          .map(([k, thb]) => `<div class="lrow" style="padding:11px 15px">
+            <div class="grow"><div class="tt" style="font-size:13.5px">${esc(k)}</div></div>
+            <div class="rt"><div class="strong num" style="color:var(--ink);font-size:14px">${thb} ฿</div>
+              <div class="tiny muted num">${money(thb / store.rate(), 'EUR')}</div></div>
+          </div>`).join('')}
+      </div>
+      <p class="tiny muted center mt">Precios orientativos, para calibrar el oído.</p>`,
+    foot: `<button class="btn block" data-close>Cerrar</button>`,
+    onMount(root, close) { root.querySelector('[data-close]').onclick = close; },
+  });
+}
+
+/* ==========================================================================
    INICIO
    ========================================================================== */
 export function viewHome() {
@@ -123,9 +233,12 @@ export function viewHome() {
     ? `<div class="cd-live">${icon('sparkle', 18)} Día ${dayNo} de ${total} · ${esc(DAYS.find(x => x.date === t)?.city || '')}</div>`
     : after
       ? `<div class="cd-live">${icon('heart', 18)} Viaje terminado. ¡Que hayan sido unos días estupendos!</div>`
-      : `<div class="countdown">
-           ${[[d, d === 1 ? 'día' : 'días'],
-              [total, 'jornadas'],
+      : `<div class="cd-lead">
+           <b>${d}</b>
+           <span>${d === 0 ? '¡hoy salís!' : d === 1 ? 'día para salir' : 'días para salir'}</span>
+         </div>
+         <div class="countdown three">
+           ${[[total, 'jornadas'],
               [CITIES.reduce((n, c) => n + (c.nights || 0), 0), 'noches'],
               [TRIP.travellers, 'viajeros']]
              .map(([v, k]) => `<div class="cd-cell"><b>${v}</b><span>${k}</span></div>`).join('')}
@@ -215,13 +328,11 @@ export function viewHome() {
   <div class="section-head"><h2>Accesos rápidos</h2></div>
   <div class="quick">
     ${[
-      ['#/agenda',    'calendar', 'Agenda',    'c-visita'],
       ['#/reservas',  'ticket',   'Reservas',  'c-vuelo'],
-      ['#/mapa',      'map',      'Mapa',      'c-hotel'],
-      ['#/gastos',    'wallet',   'Gastos',    'c-excursion'],
       ['#/documentos','file',     'Documentos','c-comida'],
-      ['#/comer',     'utensils',  'Comer',     'c-visita'],
-      ['#/listas',    'list',     'Listas',    'c-libre'],
+      ['#/comer',     'utensils', 'Comer',     'c-visita'],
+      ['#/notas',     'edit',     'Notas',     'c-libre'],
+      ['#/listas',    'list',     'Listas',    'c-hotel'],
       ['#/info',      'info',     'Info útil', 'c-traslado'],
       ['#/contactos', 'phone',    'Contactos', 'c-tren'],
       ['#/refs',      'copy',     'Localizadores', 'c-otros'],
@@ -303,6 +414,8 @@ export function viewAgenda(params) {
     <button class="${mode === 'cal' ? 'on' : ''}" data-go="#/agenda?v=cal">Calendario</button>
   </div>
   ${mode === 'cal' ? calendarView() : DAYS.map(d => dayBlock(d, t)).join('')}
+  <button class="fab" data-add-act aria-label="Añadir al calendario">${icon('plus', 25)}</button>
+
   <div class="card card-pad mt">
     <div class="row-between">
       <div><b>Descargar toda la agenda</b>
@@ -315,7 +428,7 @@ export function viewAgenda(params) {
 function dayBlock(d, t) {
   const isToday = d.date === t;
   const n = daysBetween(TRIP.start, d.date) + 1;
-  const items = [...d.items].sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+  const items = itemsOfDay(d);
   const overlaps = findOverlaps(items);
 
   return `
@@ -329,8 +442,24 @@ function dayBlock(d, t) {
   </div>
   ${overlaps.length ? `<div class="banner warn" style="margin-bottom:10px">${icon('alert', 18)}
     <div><b>Horarios que se solapan</b>${overlaps.map(o => esc(o)).join('<br>')}</div></div>` : ''}
+  ${store.note('dia:' + d.date) ? `
+    <div class="card card-pad" style="margin-bottom:10px;background:var(--sand-100);border-color:var(--sand-300)">
+      <div class="row-between" style="align-items:flex-start;gap:10px">
+        <div class="grow">
+          <div class="tiny muted strong" style="text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">Nota del día</div>
+          <div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap">${esc(store.note('dia:' + d.date))}</div>
+        </div>
+        <button class="icon-btn" data-nota="dia:${esc(d.date)}"
+          data-nota-t="Nota del ${esc(fmtDate(d.date, 'weekshort'))}">${icon('edit', 17)}</button>
+      </div>
+    </div>` : ''}
   <div class="tl">
     ${items.map(it => timelineItem(it, d)).join('')}
+  </div>
+  <div class="row" style="gap:8px;margin:2px 0 6px 66px">
+    <button class="btn sm ghost" data-add-act="${esc(d.date)}">${icon('plus', 14)} Añadir algo este día</button>
+    ${!store.note('dia:' + d.date) ? `<button class="btn sm ghost" data-nota="dia:${esc(d.date)}"
+      data-nota-t="Nota del ${esc(fmtDate(d.date, 'weekshort'))}">${icon('edit', 14)} Nota</button>` : ''}
   </div>`;
 }
 
@@ -353,11 +482,12 @@ function timelineItem(it, day) {
   <div class="tl-item ${cls(it.type)}">
     ${it.time ? `<div class="time">${it.time}${it.endTime ? `<small>${it.endTime}</small>` : ''}</div>` : ''}
     <div class="knob"></div>
-    <button class="card card-btn" data-item="${esc(key)}">
+    <button class="card card-btn" ${it.userId ? `data-uitem="${esc(it.userId)}"` : `data-item="${esc(key)}"`}>
       <div class="card-pad">
-        <div class="row" style="gap:9px;align-items:flex-start">
+        <div class="row wrap" style="gap:7px;align-items:flex-start">
           <span class="pill tinted">${icon(ty.icon, 13)} ${ty.label}</span>
           ${statusPill(it.status)}
+          ${it.userId ? `<span class="pill pill-info">${icon('plus', 12)} añadida</span>` : ''}
         </div>
         <div class="tt" style="font-size:15px;font-weight:700;margin-top:8px;letter-spacing:-.015em">${esc(it.title)}</div>
         ${it.subtitle ? `<div class="tiny muted" style="margin-top:2px">${esc(it.subtitle)}</div>` : ''}
@@ -367,6 +497,108 @@ function timelineItem(it, day) {
       </div>
     </button>
   </div>`;
+}
+
+/** Crear o editar una actividad añadida por el grupo */
+export function addActivitySheet(id, fechaPorDefecto) {
+  const a = id ? store.activity(id) : null;
+  const dias = DAYS.map(d => [d.date, `${fmtDate(d.date, 'weekshort')} · ${d.city}`]);
+  const tipos = [['visita', 'Visita'], ['comida', 'Comida'], ['excursion', 'Excursión'],
+                 ['traslado', 'Traslado'], ['libre', 'Tiempo libre'], ['aviso', 'Recordatorio'],
+                 ['vuelo', 'Vuelo'], ['hotel', 'Alojamiento'], ['otros', 'Otros']];
+
+  sheet({
+    title: a ? 'Editar' : 'Añadir al calendario',
+    sub: a ? 'Actividad añadida por vosotros' : 'Se guarda en este móvil',
+    size: 'full',
+    body: `
+      <div class="field"><label>¿Qué es?</label>
+        <input class="input" data-f="title" placeholder="Ej. Masaje en Surin"
+          value="${esc(a?.title || '')}" autofocus></div>
+
+      <div class="field"><label>Día</label>
+        <select class="select" data-f="date">
+          ${dias.map(([v, l]) => `<option value="${v}" ${
+            (a?.date || fechaPorDefecto || DAYS[0].date) === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+        </select></div>
+
+      <div class="grid-2">
+        <div class="field"><label>Hora de inicio</label>
+          <input class="input" type="time" data-f="time" value="${esc(a?.time || '')}"></div>
+        <div class="field"><label>Hora de fin</label>
+          <input class="input" type="time" data-f="endTime" value="${esc(a?.endTime || '')}"></div>
+      </div>
+
+      <div class="field"><label>Tipo</label>
+        <select class="select" data-f="type">
+          ${tipos.map(([v, l]) => `<option value="${v}" ${
+            (a?.type || 'visita') === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+        </select></div>
+
+      <div class="field"><label>Sitio (opcional)</label>
+        <input class="input" data-f="where" placeholder="Nombre o dirección"
+          value="${esc(a?.where || '')}">
+        <div class="hint">Con esto se activa el botón de abrir en Google Maps.</div></div>
+
+      <div class="field"><label>Nota</label>
+        <textarea class="textarea" data-f="note" placeholder="Precio, teléfono, qué llevar…">${esc(a?.note || '')}</textarea></div>`,
+    foot: `${a ? '<button class="btn danger" data-del>Eliminar</button>'
+              : '<button class="btn ghost" data-cancel>Cancelar</button>'}
+           <button class="btn" data-ok>Guardar</button>`,
+    onMount(root, close) {
+      root.querySelector('[data-cancel]')?.addEventListener('click', close);
+      root.querySelector('[data-del]')?.addEventListener('click', async () => {
+        if (await confirmSheet('Eliminar', '¿Quitar esta actividad del calendario?')) {
+          store.removeActivity(id);
+          close(); toast('Eliminada', 'ok');
+          window.dispatchEvent(new CustomEvent('render'));
+        }
+      });
+      root.querySelector('[data-ok]').onclick = () => {
+        const v = k => root.querySelector(`[data-f="${k}"]`).value.trim();
+        if (!v('title')) return toast('Ponle un nombre', 'err');
+        if (v('time') && v('endTime') && v('endTime') < v('time'))
+          return toast('La hora de fin es anterior a la de inicio', 'err');
+        const data = {
+          title: v('title'), date: v('date'), time: v('time'), endTime: v('endTime'),
+          type: v('type'), where: v('where'), note: v('note'), status: 'recomendado',
+        };
+        if (a) store.updateActivity(id, data); else store.addActivity(data);
+        close(); toast('Guardado en el calendario', 'ok');
+        window.dispatchEvent(new CustomEvent('render'));
+      };
+    },
+  });
+}
+
+/** Ficha de una actividad añadida por el grupo */
+export function openUserItem(id) {
+  const a = store.activity(id);
+  if (!a) return;
+  const ty = TYPE[a.type] || TYPE.otros;
+  const quien = a.by ? person(a.by) : null;
+
+  sheet({
+    title: a.title,
+    sub: fmtDate(a.date, 'weekday'),
+    body: `
+      <div class="row wrap" style="gap:7px;margin-bottom:14px">
+        <span class="pill ${cls(a.type)} tinted">${icon(ty.icon, 13)} ${ty.label}</span>
+        <span class="pill pill-info">${icon('plus', 12)} añadida por vosotros</span>
+        ${a.time ? `<span class="pill">${esc(a.time)}${a.endTime ? ' – ' + esc(a.endTime) : ''}</span>` : ''}
+      </div>
+      ${a.where ? `<p class="tiny muted" style="margin-bottom:12px">${icon('mapPin', 13)} ${esc(a.where)}</p>` : ''}
+      ${a.note ? `<div class="card card-pad" style="margin-bottom:14px;background:var(--sand-100);border-color:var(--sand-300)">
+        <div style="font-size:14px;line-height:1.55;white-space:pre-wrap">${esc(a.note)}</div></div>` : ''}
+      ${a.where ? quickActions({ address: a.where }) : ''}
+      ${quien ? `<div class="stamp">${icon('users', 13)} La añadió ${esc(quien.short)}</div>` : ''}`,
+    foot: `<button class="btn ghost" data-edit>${icon('edit', 15)} Editar</button>
+           <button class="btn" data-close>Cerrar</button>`,
+    onMount(root, close) {
+      root.querySelector('[data-close]').onclick = close;
+      root.querySelector('[data-edit]').onclick = () => { close(); setTimeout(() => addActivitySheet(id), 320); };
+    },
+  });
 }
 
 /** Ficha completa de un momento del itinerario */
@@ -479,7 +711,7 @@ function calendarView() {
     const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const day = DAYS.find(x => x.date === iso);
     const inTrip = iso >= TRIP.start && iso <= TRIP.end;
-    const dots = day ? [...new Set(day.items.map(i => i.type))].slice(0, 4)
+    const dots = day ? [...new Set(itemsOfDay(day).map(i => i.type))].slice(0, 4)
       .map(ty => `<i class="${cls(ty)}" style="background:var(--cc)"></i>`).join('') : '';
     cells += `<button class="cal-day ${inTrip ? 'in-trip' : ''} ${iso === t ? 'today' : ''}"
       ${day ? `data-go="#/dia/${iso}"` : ''}><b>${d}</b><div class="cal-dots">${dots}</div></button>`;
@@ -500,7 +732,7 @@ function calendarView() {
         <div class="ic" style="background:var(--green-100);color:var(--green-700)">
           <b style="font-size:13px">${toDate(d.date).getDate()}</b></div>
         <div class="grow"><div class="tt">${esc(d.title)}</div>
-          <div class="st">${fmtDate(d.date, 'weekshort')} · ${esc(d.city)} · ${d.items.length} actividades</div></div>
+          <div class="st">${fmtDate(d.date, 'weekshort')} · ${esc(d.city)} · ${itemsOfDay(d).length} actividades</div></div>
         <div class="chev">${icon('chevron', 17)}</div>
       </button>`).join('')}
   </div>`;
@@ -568,6 +800,7 @@ function flightsList() {
             <dt>Hora Tailandia</dt><dd class="num">${esc(f.thTime)}</dd>
           </dl>
           ${f.next ? `<div class="pill pill-muted" style="margin-top:10px">${icon('clock', 13)} ${esc(f.next)}</div>` : ''}
+          ${notaBtn('vuelo:' + f.id, 'Nota · ' + f.number)}
         </div>
       </div>`).join('')}
   </div>
@@ -598,6 +831,7 @@ function transfersList() {
             ${icon(x.status === 'pendiente' ? 'alert' : 'info', 18)}<span>${esc(x.note)}</span></div>` : ''}
           ${x.phones ? `<div class="divider"></div>${x.phones.map(([l, p]) => phoneRow(l, p)).join('')}` : ''}
           <div style="margin-top:12px">${quickActions({ lat: x.lat, lng: x.lng, address: x.from })}</div>
+          ${notaBtn('traslado:' + x.id, 'Nota · ' + x.title)}
         </div>
       </div>`).join('')}
   </div>`;
@@ -630,6 +864,9 @@ function staysList() {
             <dt>Régimen</dt><dd>${esc(s.board)}</dd>
             <dt>Dirección</dt><dd>${esc(s.address)}</dd>
             <dt>Teléfono</dt><dd><button class="copyable" data-copy="${esc(s.phone)}">${esc(s.phone)}${icon('copy', 14)}</button></dd>
+            ${s.email ? `<dt>Correo</dt><dd><a href="mailto:${esc(s.email)}">${esc(s.email)}</a></dd>` : ''}
+            ${s.zip ? `<dt>Código postal</dt><dd class="num">${esc(s.zip)}</dd>` : ''}
+            <dt>Noches</dt><dd>${s.nights}</dd>
           </dl>
           ${s.warn ? `<div class="banner warn" style="margin-top:12px">${icon('alert', 18)}<span>${esc(s.warn)}</span></div>` : ''}
           ${s.notes ? `<p class="tiny muted" style="margin-top:12px;line-height:1.5">${esc(s.notes)}</p>` : ''}
@@ -639,6 +876,13 @@ function staysList() {
             ${s.board.toLowerCase().includes('desayuno') ? '<span class="pill pill-ok">Desayuno incluido</span>' : ''}
           </div>
           <div style="margin-top:14px">${quickActions({ phone: s.phone, lat: s.lat, lng: s.lng, address: s.address, url: s.website })}</div>
+          ${s.links ? `
+            <div class="section-head"><h2>Enlaces del hotel</h2></div>
+            <div class="stack">
+              ${s.links.map(([l, u]) => `<a class="btn ghost block" href="${esc(u)}"
+                target="_blank" rel="noopener">${icon('link', 16)} ${esc(l)}</a>`).join('')}
+            </div>` : ''}
+          ${notaBtn('hotel:' + s.id, 'Nota · ' + s.name)}
         </div>
       </div>`).join('')}
   </div>`;
@@ -789,7 +1033,8 @@ export function viewLists() {
             <div class="box" style="border-style:dashed">${icon('plus', 13)}</div>
             <div class="grow"><div class="tt" style="color:var(--green-700)">Añadir algo a esta lista</div></div>
           </button>
-        </div>` : ''}
+        </div>
+        ${notaBtn('lista:' + l.id, 'Nota · ' + l.name)}` : ''}
       </div>`;
     }).join('')}
   </div>`;
@@ -866,8 +1111,11 @@ export function viewExpenses() {
   <div class="stats mt">
     <div class="stat"><div class="k">Por persona</div><div class="v">${money(perPerson, 'EUR', 0)}</div></div>
     <div class="stat"><div class="k">Apuntes</div><div class="v">${list.length}</div></div>
-    <div class="stat"><div class="k">1 € son</div><div class="v">${rate.toLocaleString('es-ES',{maximumFractionDigits:1})}<small> ฿</small></div></div>
+    <div class="stat"><div class="k">Tickets</div><div class="v">${photos.cache.size}</div></div>
   </div>
+
+  <div class="section-head"><h2>Conversor</h2></div>
+  ${converterCard()}
 
   <div class="section-head"><h2>Balance del grupo</h2></div>
   <div class="card">
@@ -905,7 +1153,8 @@ export function viewExpenses() {
       const p = person(e.paidBy);
       return `<button class="lrow" data-exp="${esc(e.id)}">
         <div class="ic" style="background:${c.color}1a;color:${c.color}">${icon('wallet', 17)}</div>
-        <div class="grow"><div class="tt">${esc(e.title)}</div>
+        <div class="grow"><div class="tt">${esc(e.title)}
+          ${photos.tiene(e.id) ? `<span style="color:var(--teal-700);margin-left:5px">${icon('camera', 13)}</span>` : ''}</div>
           <div class="st">${esc(c.label)} · ${fmtDate(e.date, 'short')}${p ? ' · ' + esc(p.short) : ''}</div></div>
         <div class="rt"><div class="strong num" style="font-size:14px;color:var(--ink)">${money(e.amount, e.currency, 0)}</div>
           ${e.currency === 'THB' ? `<div class="tiny muted num">${money(e.amount / rate, 'EUR', 0)}</div>` : ''}</div>
@@ -953,11 +1202,63 @@ export function addExpenseSheet(existing) {
         </div>
         <div class="hint">Toca para quitar o poner a cada persona.</div></div>
       <div class="field"><label>Notas</label>
-        <textarea class="textarea" data-f="note">${esc(e.note || '')}</textarea></div>`,
+        <textarea class="textarea" data-f="note">${esc(e.note || '')}</textarea></div>
+
+      <div class="section-head" style="margin-top:6px"><h2>Foto del ticket</h2></div>
+      <div id="ticket-box"></div>
+      <input type="file" accept="image/*" capture="environment" data-ticket hidden>
+      <button class="btn ghost block" data-ticket-btn style="margin-top:10px">
+        ${icon('camera', 16)} Hacer foto del ticket</button>
+      <p class="tiny muted center" style="margin-top:8px">
+        La foto se guarda en este móvil, no se sube a internet.</p>`,
     foot: `${existing && !store.isBaseExpense(existing.id)
         ? '<button class="btn danger" data-del>Eliminar</button>' : '<button class="btn ghost" data-cancel>Cancelar</button>'}
       <button class="btn" data-ok>Guardar</button>`,
     onMount(root, close) {
+      /* ---- foto del ticket ---- */
+      let pendiente = null;      // blob nuevo, aún sin guardar
+      let borrar = false;
+      const box = root.querySelector('#ticket-box');
+      const input = root.querySelector('[data-ticket]');
+
+      const pintaFoto = async () => {
+        let blob = pendiente;
+        if (!blob && !borrar && existing && photos.tiene(existing.id)) {
+          blob = await photos.get(existing.id);
+        }
+        if (!blob) { box.innerHTML = ''; return; }
+        const url = URL.createObjectURL(blob);
+        box.innerHTML = `
+          <div class="card" style="overflow:hidden">
+            <a href="${url}" target="_blank" rel="noopener">
+              <img src="${url}" alt="Ticket" style="width:100%;max-height:280px;object-fit:contain;background:var(--surface-2)">
+            </a>
+            <div class="row-between" style="padding:10px 14px">
+              <span class="tiny muted">Toca la foto para verla grande</span>
+              <button class="btn sm ghost" style="color:var(--red-600)" data-quita>
+                ${icon('trash', 14)} Quitar</button>
+            </div>
+          </div>`;
+        box.querySelector('[data-quita]').onclick = () => {
+          pendiente = null; borrar = true; pintaFoto();
+        };
+      };
+      pintaFoto();
+
+      root.querySelector('[data-ticket-btn]').onclick = () => input.click();
+      input.onchange = async () => {
+        const f = input.files && input.files[0];
+        if (!f) return;
+        try {
+          pendiente = await comprimir(f);
+          borrar = false;
+          await pintaFoto();
+        } catch (err) {
+          toast('No se ha podido usar esa foto', 'err');
+        }
+        input.value = '';
+      };
+
       root.querySelector('[data-cancel]')?.addEventListener('click', close);
       root.querySelector('[data-paid]').addEventListener('click', ev => {
         const b = ev.target.closest('[data-p]'); if (!b) return;
@@ -970,7 +1271,9 @@ export function addExpenseSheet(existing) {
       });
       root.querySelector('[data-del]')?.addEventListener('click', async () => {
         if (await confirmSheet('Eliminar gasto', '¿Seguro que quieres eliminar este gasto?')) {
-          store.removeExpense(existing.id); close(); toast('Gasto eliminado', 'ok');
+          store.removeExpense(existing.id);
+          try { await photos.remove(existing.id); } catch {}
+          close(); toast('Gasto eliminado', 'ok');
           window.dispatchEvent(new CustomEvent('render'));
         }
       });
@@ -985,10 +1288,25 @@ export function addExpenseSheet(existing) {
         if (!split.length) return toast('Elige al menos una persona para repartir', 'err');
         const data = { title, amount, currency: v('currency'), cat: v('cat'),
                        date: v('date'), paidBy, split, status: 'pagado', note: v('note').trim() };
-        if (existing && !store.isBaseExpense(existing.id)) store.updateExpense(existing.id, data);
-        else store.addExpense(data);
-        close(); toast('Gasto guardado', 'ok');
-        window.dispatchEvent(new CustomEvent('render'));
+        let id;
+        if (existing && !store.isBaseExpense(existing.id)) {
+          store.updateExpense(existing.id, data); id = existing.id;
+        } else if (existing) {
+          id = existing.id;               // gasto del paquete: solo se le añade la foto
+        } else {
+          id = store.addExpense(data);
+        }
+
+        const guardaFoto = pendiente ? photos.save(id, pendiente)
+          : borrar ? photos.remove(id)
+          : Promise.resolve();
+
+        guardaFoto
+          .catch(() => toast('La foto no se ha podido guardar', 'err'))
+          .finally(() => {
+            close(); toast('Gasto guardado', 'ok');
+            window.dispatchEvent(new CustomEvent('render'));
+          });
       });
     },
   });
@@ -1013,27 +1331,8 @@ export function exportExpenses() {
    INFORMACIÓN ÚTIL
    ========================================================================== */
 export function viewInfo() {
-  const rate = store.rate();
   return `
-  <div class="card card-pad c-hotel">
-    <div class="row-between" style="margin-bottom:12px">
-      <b style="font-size:15px">Conversor rápido</b>
-      <span class="pill pill-info">1 € = ${rate.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})} ฿</span>
-    </div>
-    <div class="grid-2">
-      <div class="field" style="margin:0"><label>Euros</label>
-        <input class="input num" type="number" inputmode="decimal" data-cv="eur" placeholder="0"></div>
-      <div class="field" style="margin:0"><label>Bahts</label>
-        <input class="input num" type="number" inputmode="decimal" data-cv="thb" placeholder="0"></div>
-    </div>
-    <div class="row wrap" style="gap:6px;margin-top:12px">
-      ${[100, 500, 1000, 2000, 5000].map(v =>
-        `<button class="chip" data-quick-thb="${v}">${v} ฿</button>`).join('')}
-    </div>
-    <div class="tiny muted" style="margin-top:10px">${store.rateInfo()
-      ? 'Cambio actualizado el ' + fmtDate(store.rateInfo().at.slice(0, 10), 'short')
-      : 'Cambio orientativo. Se actualiza solo cuando hay conexión.'}</div>
-  </div>
+  ${converterCard()}
 
   <div class="stack-lg" style="margin-top:20px">
     ${INFO.map(s => `
@@ -1059,6 +1358,7 @@ export function viewInfo() {
               ${s.actions.map(([l, h]) => `<a class="btn soft block" href="${esc(h)}">${icon('phone', 16)} ${esc(l)}</a>`).join('')}</div>` : ''}
             ${s.links ? `<div class="stack" style="margin-top:10px">
               ${s.links.map(([l, h]) => `<a class="btn ghost block" href="${esc(h)}" target="_blank" rel="noopener">${icon('link', 16)} ${esc(l)}</a>`).join('')}</div>` : ''}
+            ${notaBtn('info:' + s.id, 'Nota · ' + s.title)}
           </div>
         </div>
       </div>`).join('')}
@@ -1073,6 +1373,8 @@ export function viewContacts() {
   <div class="banner danger" style="margin-bottom:16px">${icon('alert', 18)}
     <div><b>En caso de emergencia en Tailandia</b>
       Policía turística 1155 · Emergencias médicas 1669 · Seguro +34 911 976 256</div></div>
+  ${notaBlock('contactos', 'Otros teléfonos', 'Apunta aquí cualquier teléfono nuevo: el conductor, el guía, el restaurante que habéis reservado…')}
+
   ${CONTACTS.map(g => `
     <div class="section-head"><h2>${esc(g.group)}</h2></div>
     <div class="card">
@@ -1103,6 +1405,8 @@ export function viewRefs() {
         <div class="chev">${icon('copy', 17)}</div>
       </button>`).join('')}
   </div>
+  ${notaBlock('refs', 'Otras referencias', 'Números de reserva nuevos, códigos, lo que sea.')}
+
   <div class="section-head"><h2>Datos de la reserva</h2></div>
   <div class="card card-pad">
     <dl class="kv">
@@ -1149,6 +1453,8 @@ export function viewDocs() {
         <div class="chev">${icon('chevron', 17)}</div>
       </div>
     </button>`}
+
+  ${passportCard()}
 
   <div class="card card-pad" style="margin-top:12px">
     <div class="row-between">
@@ -1229,6 +1535,88 @@ export function openFolder() {
   });
 }
 
+/* --------------------------------------------------------------- Pasaportes */
+
+/** Tailandia pide 6 meses de validez desde la entrada */
+const LIMITE_PASAPORTE = addDays(TRIP.start, 185);
+
+function passportOk(p) {
+  return p.passportExpiry && p.passportExpiry >= LIMITE_PASAPORTE;
+}
+
+export function passportCard() {
+  const todos = PEOPLE.every(passportOk);
+  return `
+  <div class="section-head"><h2>Pasaportes</h2></div>
+  <div class="card">
+    <div class="banner ${todos ? 'info' : 'danger'}" style="border-radius:0;margin:0">
+      ${icon(todos ? 'check' : 'alert', 18)}
+      <div><b>${todos ? 'Los cuatro sirven para este viaje' : 'Hay algún pasaporte que no llega'}</b>
+        Tailandia pide seis meses de validez desde la entrada, es decir, hasta
+        el ${fmtDate(LIMITE_PASAPORTE, 'long')}.</div>
+    </div>
+    ${PEOPLE.map(p => {
+      const ok = passportOk(p);
+      const num = store.note('pasaporte:' + p.id);
+      return `<button class="lrow" data-pasaporte="${p.id}">
+        ${avatar(p.name, p.color)}
+        <div class="grow" style="margin-left:2px">
+          <div class="tt" style="font-size:13.5px">${esc(p.short)}</div>
+          <div class="st">Caduca el ${fmtDate(p.passportExpiry, 'medium')}${num ? ' · nº guardado' : ''}</div>
+        </div>
+        <span class="pill ${ok ? 'pill-ok' : 'pill-danger'}">${ok ? 'Válido' : 'Revisar'}</span>
+        <div class="chev">${icon('chevron', 17)}</div>
+      </button>`;
+    }).join('')}
+  </div>`;
+}
+
+export function openPassport(id) {
+  const p = person(id);
+  if (!p) return;
+  const key = 'pasaporte:' + id;
+  const ok = passportOk(p);
+
+  sheet({
+    title: 'Pasaporte de ' + p.short,
+    sub: p.name,
+    body: `
+      <div class="banner ${ok ? 'info' : 'danger'}" style="margin-bottom:14px">
+        ${icon(ok ? 'check' : 'alert', 18)}
+        <div><b>${ok ? 'Sirve para este viaje' : 'No llega a los seis meses'}</b>
+          Caduca el ${fmtDate(p.passportExpiry, 'long')}. Para entrar en Tailandia
+          el ${fmtDate(TRIP.start, 'short')} tiene que valer al menos hasta el
+          ${fmtDate(LIMITE_PASAPORTE, 'long')}.</div>
+      </div>
+
+      <div class="field">
+        <label>Nº de pasaporte</label>
+        <input class="input" data-num placeholder="Ej. PAX000000" value="${esc(store.note(key))}"
+          autocapitalize="characters" spellcheck="false">
+        <div class="hint">Va bien tenerlo a mano para rellenar la TDAC.</div>
+      </div>
+
+      <div class="banner warn">${icon('lock', 18)}
+        <div><b>Esto no sale de tu móvil</b>El número se guarda solo aquí, en este
+        teléfono. No se sube a internet, no viaja al repositorio y los demás no lo ven.
+        Aun así, no lo pongas en un móvil que no sea tuyo.</div></div>`,
+    foot: `<button class="btn ghost" data-borra>Borrar</button>
+           <button class="btn" data-ok>Guardar</button>`,
+    onMount(root, close) {
+      root.querySelector('[data-borra]').onclick = () => {
+        store.setNote(key, '');
+        close(); toast('Borrado', 'ok');
+        window.dispatchEvent(new CustomEvent('render'));
+      };
+      root.querySelector('[data-ok]').onclick = () => {
+        store.setNote(key, root.querySelector('[data-num]').value.trim().toUpperCase());
+        close(); toast('Guardado en este móvil', 'ok');
+        window.dispatchEvent(new CustomEvent('render'));
+      };
+    },
+  });
+}
+
 export function openDoc(id) {
   const d = DOCS.find(x => x.id === id);
   if (!d) return;
@@ -1259,7 +1647,8 @@ export function openDoc(id) {
         <input class="input" data-doclink placeholder="https://…" value="${esc(store.note(key))}">
         <div class="hint">Se guarda solo en este móvil.</div>
       </div>
-      <div id="doc-open"></div>`,
+      <div id="doc-open"></div>
+      ${notaBlock('docnota:' + id, 'Nota', 'Dónde está el original, qué falta, a quién se lo pediste…')}`,
     foot: `<button class="btn ghost" data-close>Cerrar</button>
            <button class="btn" data-save>Guardar enlace</button>`,
     onMount(root, close) {
@@ -1308,9 +1697,16 @@ export function viewFood(params) {
               <div class="tiny" style="color:var(--green-700);font-weight:800;margin-top:4px">${esc(i.price)}</div>
               ${i.note ? `<div class="tiny muted" style="margin-top:6px;line-height:1.5">${esc(i.note)}</div>` : ''}
             </div>
-            <a class="icon-btn" href="${mapsUrl(i.q || i.name)}" target="_blank" rel="noopener"
-               aria-label="Ver en el mapa">${icon('mapPin', 19)}</a>
+            <div class="row" style="gap:4px;flex:none">
+              <button class="icon-btn" data-nota="comer:${esc(i.name)}"
+                data-nota-t="Nota · ${esc(i.name)}"
+                aria-label="Nota">${icon('edit', 18)}</button>
+              <a class="icon-btn" href="${mapsUrl(i.q || i.name)}" target="_blank" rel="noopener"
+                 aria-label="Ver en el mapa">${icon('mapPin', 19)}</a>
+            </div>
           </div>
+          ${store.note('comer:' + i.name) ? `<div class="card card-pad" style="margin-top:10px;background:var(--sand-100);border-color:var(--sand-300)">
+            <div style="font-size:13px;line-height:1.5;white-space:pre-wrap">${esc(store.note('comer:' + i.name))}</div></div>` : ''}
         </div>`).join('')}
     </div>`;
 
@@ -1333,6 +1729,9 @@ export function viewFood(params) {
   ${bloque('Dónde comer', 'utensils', f.eat)}
   ${bloque('Dónde comprar', 'wallet', f.shop)}
 
+  ${notaBlock('comerciudad:' + f.city, 'Notas de ' + f.city,
+    'Sitios que os han gustado, precios reales, lo que hay que repetir…')}
+
   <div class="section-head"><h2>Precios de referencia</h2></div>
   <div class="stack">
     ${PRICES.map(p => `
@@ -1352,6 +1751,129 @@ export function viewFood(params) {
 }
 
 /* ==========================================================================
+   NOTAS
+   ========================================================================== */
+
+/** Convierte la clave interna de una nota en algo legible */
+function noteLabel(key) {
+  const [tipo, ...resto] = key.split(':');
+  const r = resto.join(':');
+  if (key === 'contactos') return { ic: 'phone', t: 'Otros teléfonos', go: '#/contactos' };
+  if (key === 'refs') return { ic: 'copy', t: 'Otras referencias', go: '#/refs' };
+  switch (tipo) {
+    case 'dia':      return { ic: 'calendar', t: 'Día ' + fmtDate(r, 'weekshort'), go: '#/dia/' + r };
+    case 'vuelo':    return { ic: 'plane', t: 'Vuelo ' + (FLIGHTS.find(f => f.id === r)?.number || ''), go: '#/reservas?t=vuelos' };
+    case 'traslado': return { ic: 'car', t: TRANSFERS.find(x => x.id === r)?.title || 'Traslado', go: '#/reservas?t=traslados' };
+    case 'hotel':    return { ic: 'bed', t: STAYS.find(x => x.id === r)?.name || 'Alojamiento', go: '#/reservas?t=hoteles' };
+    case 'exc':      return { ic: 'compass', t: EXCURSIONS.find(x => x.id === r)?.title || 'Excursión', go: '#/reservas?t=excursiones' };
+    case 'docnota':  return { ic: 'file', t: DOCS.find(x => x.id === r)?.title || 'Documento', go: '#/documentos' };
+    case 'doc':      return { ic: 'link', t: 'Enlace · ' + (DOCS.find(x => x.id === r)?.title || ''), go: '#/documentos' };
+    case 'docs':     return { ic: 'file', t: 'Carpeta de documentos', go: '#/documentos' };
+    case 'comer':    return { ic: 'utensils', t: r, go: '#/comer' };
+    case 'comerciudad': return { ic: 'utensils', t: 'Comer y comprar · ' + r, go: '#/comer?c=' + encodeURIComponent(r) };
+    case 'info':     return { ic: 'info', t: INFO.find(x => x.id === r)?.title || 'Información útil', go: '#/info' };
+    case 'lista':    return { ic: 'list', t: LISTS.find(x => x.id === r)?.name || 'Lista', go: '#/listas' };
+    case 'contactos':return { ic: 'phone', t: 'Otros teléfonos', go: '#/contactos' };
+    case 'refs':     return { ic: 'copy', t: 'Otras referencias', go: '#/refs' };
+    case 'note': {
+      const [fecha, ...tit] = r.split(':');
+      return { ic: 'star', t: tit.join(':') || 'Actividad', go: '#/dia/' + fecha, sub: fmtDate(fecha, 'weekshort') };
+    }
+    default: return { ic: 'edit', t: key, go: '' };
+  }
+}
+
+export function viewNotes() {
+  const libres = store.freeNotes();
+  const enFichas = Object.entries(store.get().notes)
+    .filter(([k, v]) => v && v.trim()
+      && !k.startsWith('doc:')          // enlaces, no notas
+      && !k.startsWith('pasaporte:')    // datos sensibles, no se listan aquí
+      && k !== 'docs:folder');
+
+  return `
+  <button class="btn block" data-add-note>${icon('plus', 16)} Escribir una nota</button>
+
+  ${libres.length ? `
+    <div class="section-head"><h2>Mis notas</h2></div>
+    <div class="stack">
+      ${libres.map(n => {
+        const quien = n.by ? person(n.by) : null;
+        return `
+        <button class="card card-btn" data-note-id="${esc(n.id)}"
+          style="background:var(--sand-100);border-color:var(--sand-300)">
+          <div class="card-pad">
+            ${n.title ? `<div class="strong" style="font-size:15px;margin-bottom:5px">${esc(n.title)}</div>` : ''}
+            <div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap;color:var(--ink-2)">${esc(n.body)}</div>
+            <div class="stamp">${quien ? avatar(quien.name, quien.color, 'sm') + ' ' + esc(quien.short) + ' · ' : ''}
+              ${fmtDate(n.at.slice(0, 10), 'short')}</div>
+          </div>
+        </button>`;
+      }).join('')}
+    </div>` : ''}
+
+  ${enFichas.length ? `
+    <div class="section-head"><h2>Notas puestas en fichas</h2></div>
+    <div class="card">
+      ${enFichas.map(([k, v]) => {
+        const l = noteLabel(k);
+        return `<button class="lrow" data-nota="${esc(k)}" data-nota-t="${esc(l.t)}">
+          <div class="ic tinted c-libre">${icon(l.ic, 17)}</div>
+          <div class="grow">
+            <div class="tt" style="font-size:13.5px">${esc(l.t)}</div>
+            <div class="st" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v)}</div>
+          </div>
+          <div class="chev">${icon('chevron', 17)}</div>
+        </button>`;
+      }).join('')}
+    </div>` : ''}
+
+  ${!libres.length && !enFichas.length ? emptyState('edit', 'Todavía no hay notas',
+    'Puedes escribir notas sueltas aquí, y también dentro de cada día, vuelo, hotel, excursión o documento. Todas acaban apareciendo en esta pantalla.') : ''}
+
+  <div class="banner info mt">${icon('info', 18)}
+    <div><b>Dónde se guardan</b>Las notas se guardan en este móvil. Para que las vea
+    todo el grupo, pásalas por el chat o pídemelas y las dejo fijas en la app.</div></div>`;
+}
+
+export function openFreeNote(id) {
+  const n = id ? store.freeNote(id) : null;
+  sheet({
+    title: n ? 'Nota' : 'Nueva nota',
+    size: 'full',
+    body: `
+      <div class="field"><label>Título (opcional)</label>
+        <input class="input" data-f="title" placeholder="Ej. Ideas para el día libre"
+          value="${esc(n?.title || '')}"></div>
+      <div class="field"><label>Nota</label>
+        <textarea class="textarea" style="min-height:220px" data-f="body"
+          placeholder="Escribe lo que quieras…" ${n ? '' : 'autofocus'}>${esc(n?.body || '')}</textarea></div>`,
+    foot: `${n ? '<button class="btn danger" data-del>Eliminar</button>'
+              : '<button class="btn ghost" data-cancel>Cancelar</button>'}
+           <button class="btn" data-ok>Guardar</button>`,
+    onMount(root, close) {
+      root.querySelector('[data-cancel]')?.addEventListener('click', close);
+      root.querySelector('[data-del]')?.addEventListener('click', async () => {
+        if (await confirmSheet('Eliminar nota', '¿Seguro que quieres borrarla?')) {
+          store.removeFreeNote(id);
+          close(); toast('Nota eliminada', 'ok');
+          window.dispatchEvent(new CustomEvent('render'));
+        }
+      });
+      root.querySelector('[data-ok]').onclick = () => {
+        const t = root.querySelector('[data-f="title"]').value.trim();
+        const b = root.querySelector('[data-f="body"]').value.trim();
+        if (!b && !t) return toast('La nota está vacía', 'err');
+        if (n) store.updateFreeNote(id, { title: t, body: b });
+        else store.addFreeNote(t, b);
+        close(); toast('Nota guardada', 'ok');
+        window.dispatchEvent(new CustomEvent('render'));
+      };
+    },
+  });
+}
+
+/* ==========================================================================
    MÁS  (menú)
    ========================================================================== */
 export function viewMore() {
@@ -1360,6 +1882,7 @@ export function viewMore() {
     ['#/reservas',   'ticket', 'Reservas',        'Vuelos, traslados, hoteles y excursiones'],
     ['#/documentos', 'file',   'Documentos',      'Billetes, bonos, seguros y copias'],
     ['#/comer',      'utensils','Comer y comprar','Restaurantes y supermercados con precios'],
+    ['#/notas',      'edit',   'Notas',           'Todo lo que habéis apuntado, junto'],
     ['#/listas',     'list',   'Listas',          'Equipaje, documentación y pendientes'],
     ['#/info',      'info',   'Información útil','Moneda, clima, costumbres y frases'],
     ['#/contactos', 'phone',  'Contactos',       'Agencia, hoteles, seguro y emergencias'],

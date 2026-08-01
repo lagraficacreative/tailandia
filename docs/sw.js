@@ -1,6 +1,6 @@
 /* Service worker: guarda la app en el móvil para que funcione sin conexión */
 
-const VERSION = 'tth-v2';
+const VERSION = 'tth-v4';
 const SHELL = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const SHELL = [
   './js/core.js',
   './js/data.js',
   './js/store.js',
+  './js/photos.js',
   './js/views.js',
   './vendor/leaflet.js',
   './vendor/leaflet.css',

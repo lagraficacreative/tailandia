@@ -27,11 +27,22 @@ export const TRIP = {
   },
 };
 
+/* --------------------------------------------------------------------------
+   VIAJEROS
+   Aquí solo va la fecha de caducidad del pasaporte, que es lo que hace falta
+   comprobar antes de viajar. El NÚMERO de pasaporte no se pone nunca aquí:
+   esta aplicación está publicada en un repositorio público.
+   Cada uno puede guardar su número desde la propia app, y se queda en su móvil.
+   -------------------------------------------------------------------------- */
 export const PEOPLE = [
-  { id: 'montse', name: 'Montserrat Torrelles Teixidó', short: 'Montse', color: '#0E6B5C' },
-  { id: 'carmen', name: 'Carmen Teixidó Ortiz',         short: 'Carmen', color: '#E8664B' },
-  { id: 'alba',   name: 'Alba Puiggros Torrelles',      short: 'Alba',   color: '#0FA3A3' },
-  { id: 'biel',   name: 'Biel Puiggros Torrelles',      short: 'Biel',   color: '#7A5AF8' },
+  { id: 'montse', name: 'Montserrat Torrelles Teixidó', short: 'Montse', color: '#0E6B5C',
+    passportExpiry: '2034-06-25' },
+  { id: 'carmen', name: 'Carmen Teixidó Ortiz',         short: 'Carmen', color: '#E8664B',
+    passportExpiry: '2033-09-22' },
+  { id: 'alba',   name: 'Alba Puiggros Torrelles',      short: 'Alba',   color: '#0FA3A3',
+    passportExpiry: '2028-08-03' },
+  { id: 'biel',   name: 'Biel Puiggros Torrelles',      short: 'Biel',   color: '#7A5AF8',
+    passportExpiry: '2029-06-25' },
 ];
 
 export const CITIES = [
@@ -608,7 +619,15 @@ export const STAYS = [
     board: 'Alojamiento y desayuno',
     status: 'confirmado',
     lat: 13.7263, lng: 100.5122,
-    website: 'https://www.marriott.com/hotels/travel/bkkrs-royal-orchid-sheraton-hotel-and-towers/',
+    website: 'https://www.marriott.com/en-us/hotels/bkksi-royal-orchid-sheraton-riverside-hotel-bangkok/overview/',
+    email: 'royalorchid.sheraton@sheraton.com',
+    zip: '10500',
+    links: [
+      ['Web oficial del hotel', 'https://www.marriott.com/en-us/hotels/bkksi-royal-orchid-sheraton-riverside-hotel-bangkok/overview/'],
+      ['Cómo llegar y qué hay alrededor', 'https://www.marriott.com/en-us/hotels/bkksi-royal-orchid-sheraton-riverside-hotel-bangkok/maps-directions/'],
+      ['Restaurantes del hotel', 'https://www.marriott.com/en-us/hotels/bkksi-royal-orchid-sheraton-riverside-hotel-bangkok/dining/'],
+      ['Ver en Google Maps', 'https://www.google.com/maps/search/?api=1&query=Royal+Orchid+Sheraton+Riverside+Hotel+Bangkok'],
+    ],
     photo: '',   // pega aquí la URL de una foto real si quieres
     amenities: ['2 piscinas exteriores', 'Spa', 'Centro de bienestar 24 h', 'Pista de tenis',
                 'Wifi gratis', 'Conserjería', 'Transporte gratuito hasta 1 km', 'Aparcamiento'],
@@ -629,6 +648,14 @@ export const STAYS = [
     status: 'confirmado',
     lat: 7.9776, lng: 98.2790,
     website: 'https://www.twinpalms-phuket.com/',
+    email: 'book@twinpalms-phuket.com',
+    zip: '83110',
+    links: [
+      ['Web oficial del hotel', 'https://www.twinpalms-phuket.com/'],
+      ['Restaurantes y bares', 'https://www.twinpalms-phuket.com/restaurants-bars/'],
+      ['Cómo llegar', 'https://www.twinpalms-phuket.com/contact-us/'],
+      ['Ver en Google Maps', 'https://www.google.com/maps/search/?api=1&query=Twinpalms+Surin+Beach+Phuket'],
+    ],
     photo: '',   // pega aquí la URL de una foto real si quieres
     amenities: ['Piscina exterior', 'Baño turco', 'Gimnasio', 'Spa', 'Wifi gratis',
                 'Transporte gratuito a la playa', 'Recepción 24 h', 'Tintorería'],
@@ -846,7 +873,7 @@ export const LISTS = [
     subtitle: 'Repasadla el domingo 2 de agosto',
     items: [
       { h: '1 · Documentación' },
-      { t: 'Comprobar que los cuatro pasaportes tienen 6 meses de validez desde la entrada en Tailandia', due: '2026-08-02' },
+      { t: 'Comprobar que los cuatro pasaportes tienen 6 meses de validez — COMPROBADO, los cuatro sirven', due: '2026-08-02' },
       { t: 'Revisar que los nombres de los billetes coincidan exactamente con los pasaportes', due: '2026-08-02' },
       { t: 'Descargar en el móvil los billetes de avión', due: '2026-08-03' },
       { t: 'Descargar en el móvil los bonos de los hoteles', due: '2026-08-03' },
@@ -1428,7 +1455,9 @@ export const DOCS = [
   },
   {
     id: 'pasaportes', title: 'Copias de los pasaportes', icon: 'lock', group: 'Personal',
-    detail: 'Copia digital de los cuatro pasaportes, más una copia impresa. Guardadlas separadas del original.',
+    detail: `Copia digital de los cuatro pasaportes, más una copia impresa. Guardadlas separadas del original.
+
+**No las pongas en la carpeta general de Drive**, porque su enlace está a la vista en esta aplicación. Para los pasaportes, crea una carpeta aparte en modo restringido y compártela por correo solo con los cuatro. Ese enlace no lo pegues aquí.`,
     sensitive: true,
     url: '',
   },
